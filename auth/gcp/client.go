@@ -131,11 +131,18 @@ type Request struct {
 // reports a non-interactive pending state (up to the configured poll timeout).
 // If interactive consent is required it returns an [auth.ConsentRequiredError].
 func (c *Client) RetrieveCredential(ctx context.Context, req Request) (auth.Credential, error) {
+	cred, _, err := c.retrieve(ctx, req)
+	return cred, err
+}
+
+// retrieve is RetrieveCredential plus the credential's expiry (zero when the
+// service does not report one), which callers use to cache the result.
+func (c *Client) retrieve(ctx context.Context, req Request) (auth.Credential, time.Time, error) {
 	if req.Resource == "" {
-		return nil, fmt.Errorf("gcp: RetrieveCredential requires a Resource")
+		return nil, time.Time{}, fmt.Errorf("gcp: RetrieveCredential requires a Resource")
 	}
 	if req.UserID == "" {
-		return nil, fmt.Errorf("gcp: RetrieveCredential requires a UserID")
+		return nil, time.Time{}, fmt.Errorf("gcp: RetrieveCredential requires a UserID")
 	}
 
 	retrieve := c.retrieveAgentIdentity
@@ -148,29 +155,33 @@ func (c *Client) RetrieveCredential(ctx context.Context, req Request) (auth.Cred
 	for {
 		res, err := retrieve(ctx, req)
 		if err != nil {
-			return nil, err
+			return nil, time.Time{}, err
 		}
 		switch o := res.(type) {
 		case credOutcome:
-			return mapCredential(o.header, o.token)
+			cred, err := mapCredential(o.header, o.token)
+			if err != nil {
+				return nil, time.Time{}, err
+			}
+			return cred, o.expiresAt, nil
 		case consentOutcome:
-			return nil, &auth.ConsentRequiredError{AuthURI: o.authURI, Nonce: o.nonce}
+			return nil, time.Time{}, &auth.ConsentRequiredError{AuthURI: o.authURI, Nonce: o.nonce}
 		case rejectedOutcome:
-			return nil, fmt.Errorf("%w for %q", ErrConsentRejected, req.Resource)
+			return nil, time.Time{}, fmt.Errorf("%w for %q", ErrConsentRejected, req.Resource)
 		case pendingOutcome:
 			remaining := time.Until(deadline)
 			if remaining <= 0 {
-				return nil, fmt.Errorf("%w for %q", ErrPollTimeout, req.Resource)
+				return nil, time.Time{}, fmt.Errorf("%w for %q", ErrPollTimeout, req.Resource)
 			}
 			wait := min(backoff, remaining)
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, time.Time{}, ctx.Err()
 			case <-time.After(wait):
 			}
 			backoff = min(backoff*2, maxBackoff)
 		default:
-			return nil, fmt.Errorf("gcp: unexpected retrieval outcome %T", res)
+			return nil, time.Time{}, fmt.Errorf("gcp: unexpected retrieval outcome %T", res)
 		}
 	}
 }
@@ -180,8 +191,12 @@ func (c *Client) RetrieveCredential(ctx context.Context, req Request) (auth.Cred
 type outcome interface{ isOutcome() }
 
 type (
-	// credOutcome carries a successfully retrieved {header, token} credential.
-	credOutcome struct{ header, token string }
+	// credOutcome carries a successfully retrieved {header, token} credential and
+	// its expiry (zero when the service does not report one).
+	credOutcome struct {
+		header, token string
+		expiresAt     time.Time
+	}
 	// pendingOutcome means retrieval is still pending; poll again.
 	pendingOutcome struct{}
 	// consentOutcome means interactive consent is required at authURI.
@@ -201,8 +216,22 @@ func (rejectedOutcome) isOutcome() {}
 // credentialPayload is the {header, token} success shape shared by both services
 // (under "success" for Agent Identity, "response" for the IAM Connector operation).
 type credentialPayload struct {
-	Token  string `json:"token"`
-	Header string `json:"header"`
+	Token      string `json:"token"`
+	Header     string `json:"header"`
+	ExpireTime string `json:"expireTime"`
+}
+
+// parseExpireTime parses a proto Timestamp (RFC 3339) into a time.Time, or
+// returns the zero time when empty or malformed.
+func parseExpireTime(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 // mapCredential maps the service's {header, token} tuple to an [auth.Credential]:
