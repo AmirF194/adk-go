@@ -125,6 +125,10 @@ type Request struct {
 	// ContinueURI is the developer-hosted URI used to finalize managed-OAuth
 	// (3-legged) flows. Unused by non-interactive flows.
 	ContinueURI string
+	// PriorToken is the previously issued (now rejected) token. Both services
+	// take it as force_refresh_token to mint a fresh credential after a
+	// downstream rejection; empty on a normal fetch.
+	PriorToken string
 }
 
 // RetrieveCredential retrieves a credential for req, polling while the service
