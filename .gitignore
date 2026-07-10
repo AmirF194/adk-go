@@ -16,7 +16,3 @@
 coverage.*
 *.coverprofile
 profile.cov
-
-# Go workspace file
-go.work
-go.work.sum
