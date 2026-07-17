@@ -21,9 +21,9 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
-	"google.golang.org/adk/internal/llminternal"
-	"google.golang.org/adk/internal/llminternal/converters"
-	"google.golang.org/adk/model"
+	"google.golang.org/adk/v2/internal/llminternal"
+	"google.golang.org/adk/v2/internal/llminternal/converters"
+	"google.golang.org/adk/v2/model"
 )
 
 type openAIModel struct {

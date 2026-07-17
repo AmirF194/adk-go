@@ -22,10 +22,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"google.golang.org/adk/session"
+	"google.golang.org/adk/v2/platform"
+	"google.golang.org/adk/v2/session"
 )
 
 // databaseService is an database implementation of sessionService.Service.
@@ -75,7 +75,7 @@ func (s *databaseService) Create(ctx context.Context, req *session.CreateRequest
 
 	sessionID := req.SessionID
 	if sessionID == "" {
-		sessionID = uuid.NewString()
+		sessionID = platform.NewUUID(ctx)
 	}
 
 	stateMap := req.State
@@ -87,9 +87,9 @@ func (s *databaseService) Create(ctx context.Context, req *session.CreateRequest
 		userID:    req.UserID,
 		sessionID: sessionID,
 		state:     stateMap,
-		updatedAt: time.Now(),
+		updatedAt: platform.Now(ctx),
 	}
-	createdSession, err := createStorageSession(val)
+	createdSession, err := createStorageSession(ctx, val)
 	if err != nil {
 		return nil, err
 	}
@@ -328,22 +328,29 @@ func (s *databaseService) AppendEvent(ctx context.Context, curSession session.Se
 		return nil
 	}
 
-	// Trim temp state before persisting
-	event = trimTempDeltaState(event)
+	// Truncate timestamp to microsecond precision to match database precision and prevent rounding errors.
+	event.Timestamp = event.Timestamp.Truncate(time.Microsecond)
 
 	sess, ok := curSession.(*localSession)
 	if !ok {
 		return fmt.Errorf("unexpected session type %T", sess)
 	}
+	// append it to session
+	if err := sess.appendEvent(event); err != nil {
+		return err
+	}
 
+	// Trim temp state before persisting
+	event = trimTempDeltaState(event)
 	// applyChanges and persist them
 	err := s.applyEvent(ctx, sess, event)
 	if err != nil {
 		return err
 	}
 
-	// append it to session
-	return sess.appendEvent(event)
+	// update local session last update time
+	sess.updatedAt = event.Timestamp
+	return nil
 }
 
 // applyEvent fetches the session, validates it, applies state changes from an
@@ -363,9 +370,9 @@ func (s *databaseService) applyEvent(ctx context.Context, session *localSession,
 		}
 
 		// Ensure the session object is not stale.
-		// We use UnixNano() for microsecond-level precision, matching the Python code.
-		storageUpdateTime := storageSess.UpdateTime.UnixNano()
-		sessionUpdateTime := session.updatedAt.UnixNano()
+		// We use UnixMicro() for microsecond-level precision, matching the Python code.
+		storageUpdateTime := storageSess.UpdateTime.UnixMicro()
+		sessionUpdateTime := session.updatedAt.UnixMicro()
 		if storageUpdateTime > sessionUpdateTime {
 			return fmt.Errorf(
 				"stale session error: last update time from request (%s) is older than in database (%s)",

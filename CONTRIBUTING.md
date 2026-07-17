@@ -3,6 +3,7 @@
 We'd love to accept your patches and contributions to this project.
 
 -   [How to contribute](#how-to-contribute)
+-   [Branches](#branches)
 -   [Before you begin](#before-you-begin)
     -   [Sign our Contributor License Agreement](#sign-our-contributor-license-agreement)
     -   [Review our community guidelines](#review-our-community-guidelines)
@@ -17,12 +18,42 @@ We'd love to accept your patches and contributions to this project.
     -   [Documentation](#documentation)
     -   [Alignment with adk-python](#alignment-with-adk-python)
 
+## Branches
+
+ADK Go uses two long-lived branches:
+
+-   **`main`** — the actively developed 2.x line. This is the default branch and
+    the base for new pull requests.
+-   **`v1`** — the maintenance branch for the 1.x line. Target this branch only
+    for fixes that need to ship to 1.x.
+
+The `v1` branch is a snapshot of the 1.x line, branched from `main` before the
+2.0 work landed. `main` then continued forward as the 2.x line (the 2.0 release
+was merged into it), so its history is unbroken — old clones fast-forward
+cleanly. There is no need to re-sync or rename anything locally:
+
+```bash
+git switch main
+git pull            # fast-forwards onto the 2.x line
+```
+
+To work on a 1.x fix, base your branch on `v1`:
+
+```bash
+git switch -c my-fix origin/v1
+```
+
 ## Before you begin
 
 ### Sign our Contributor License Agreement
 
-Contributions to this project must be accompanied by a
-[Contributor License Agreement](https://cla.developers.google.com/about) (CLA).
+All submissions to this project need to follow Google’s [Contributor
+License Agreement (CLA)](https://cla.developers.google.com/about), which
+covers any original work of authorship included in the submission. This
+doesn't prohibit the use of coding assistance tools, including tool-,
+AI-, or machine-generated code, as long as these submissions abide by the
+CLA's requirements.
+
 You (or your employer) retain the copyright to your contribution; this simply
 gives us permission to use and redistribute your contributions as part of the
 project.
@@ -116,6 +147,15 @@ Depending on your change:
         runner setup.
     -   Include the command used and console output showing test results.
     -   Highlight sections of the log that directly relate to your change.
+
+# ADK Web
+
+## Updating ADK web version to latest
+
+-   Run `./scripts/adk-web/update-adk-web.sh` to update the web UI to the latest version from [GitHub](https://github.com/google/adk-web).
+-   Run `docker run -it adk-web-builder:latest sh -c "<COMMAND>"` to start the container and debug the build, e.g.:
+    -   `docker run -it adk-web-builder:latest sh -c "ls -alh dist/agent_framework_web/browser"` to view the built files.
+    -   `docker run -it adk-web-builder:latest sh -c "npm run build"` to debug the build output.
 
 ### Documentation
 
