@@ -12,15 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openai
+package openaimodel
 
 import "errors"
 
 var (
 	// ErrModelNameRequired is returned when a model name is not provided.
 	ErrModelNameRequired = errors.New("openai: model name is required")
-	// ErrClientRequired is returned when an OpenAI client is not provided.
-	ErrClientRequired = errors.New("openai: client is required")
 	// ErrRequestNil is returned when the provided request is nil.
 	ErrRequestNil = errors.New("openai: request is nil")
 	// ErrStreamingUnavailable is returned when streaming is requested but not available.

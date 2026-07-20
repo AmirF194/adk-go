@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openai
+package openaimodel
 
 import (
 	"strings"
@@ -20,8 +20,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/openai/openai-go/v3/responses"
-	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
+
+	"google.golang.org/adk/v2/model"
 )
 
 func TestBuildOpenAIParams_Text(t *testing.T) {

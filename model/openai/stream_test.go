@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openai
+package openaimodel
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/openai/openai-go/v3/responses"
+
 	"google.golang.org/adk/v2/internal/llminternal"
 )
 

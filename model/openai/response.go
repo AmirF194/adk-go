@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openai
+package openaimodel
 
 import (
 	"encoding/json"
@@ -133,17 +133,11 @@ func finishReason(resp *responses.Response) genai.FinishReason {
 		return genai.FinishReasonMaxTokens
 	case "content_filter":
 		return genai.FinishReasonSafety
-	case "tool_calls_exhausted":
-		return genai.FinishReasonOther
 	case "":
-		// fallthrough
+		return genai.FinishReasonStop
 	default:
-		if resp.IncompleteDetails.Reason != "" {
-			return genai.FinishReasonOther
-		}
+		return genai.FinishReasonOther
 	}
-
-	return genai.FinishReasonStop
 }
 
 func convertUsage(usage responses.ResponseUsage) *genai.GenerateContentResponseUsageMetadata {

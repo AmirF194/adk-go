@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openai
+package openaimodel
 
 import (
 	"encoding/json"
@@ -76,11 +76,11 @@ func (t *streamTranslator) process(evt responses.ResponseStreamEventUnion) (*gen
 			return nil, err
 		}
 		return singlePartResponse(part), nil
-	case "response.failed":
+	case responseFailed:
 		failed := evt.AsResponseFailed()
 		// If the response failed, we return an error with the message.
 		return nil, fmt.Errorf("openai response failed: %s", failed.Response.Error.Message)
-	case "error":
+	case errorEvent:
 		// Generic stream errors are also returned.
 		if evt.Message != "" {
 			return nil, fmt.Errorf("openai stream error: %s", evt.Message)

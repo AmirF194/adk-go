@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openai
+package openaimodel
 
 import (
 	"encoding/json"
@@ -23,8 +23,9 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 	"github.com/openai/openai-go/v3/shared/constant"
-	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
+
+	"google.golang.org/adk/v2/model"
 )
 
 // buildOpenAIParams converts a generic LLMRequest into the OpenAI-specific

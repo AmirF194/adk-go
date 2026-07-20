@@ -12,37 +12,61 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openai
+package openaimodel
 
 import (
 	"context"
 	"fmt"
 	"iter"
+	"net/http"
 
 	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
+
 	"google.golang.org/adk/v2/internal/llminternal"
 	"google.golang.org/adk/v2/internal/llminternal/converters"
 	"google.golang.org/adk/v2/model"
 )
+
+// ClientConfig configures the OpenAI client. Mirrors model/gemini, which takes
+// *genai.ClientConfig. Empty APIKey/BaseURL fall back to the OPENAI_API_KEY /
+// OPENAI_BASE_URL env vars (handled by openai-go's default options).
+type ClientConfig struct {
+	APIKey     string
+	BaseURL    string       // for OpenAI-compatible endpoints
+	HTTPClient *http.Client // optional; e.g. for tests
+
+	// Options is an escape hatch for advanced openai-go request options,
+	// appended after the options derived from the fields above.
+	Options []option.RequestOption
+}
 
 type openAIModel struct {
 	client *openai.Client
 	name   string
 }
 
-func NewModel(_ context.Context, modelName string, client openai.Client) (model.LLM, error) {
-	// We drop the context because OpenAI doesn't take a context when creating a new Client
+func NewModel(_ context.Context, modelName string, cfg *ClientConfig) (model.LLM, error) {
 	if modelName == "" {
 		return nil, ErrModelNameRequired
 	}
-	if len(client.Options) == 0 {
-		return nil, ErrClientRequired
+	if cfg == nil {
+		cfg = &ClientConfig{}
 	}
-	return &openAIModel{
-		client: &client,
-		name:   modelName,
-	}, nil
+	var opts []option.RequestOption
+	if cfg.APIKey != "" {
+		opts = append(opts, option.WithAPIKey(cfg.APIKey))
+	}
+	if cfg.BaseURL != "" {
+		opts = append(opts, option.WithBaseURL(cfg.BaseURL))
+	}
+	if cfg.HTTPClient != nil {
+		opts = append(opts, option.WithHTTPClient(cfg.HTTPClient))
+	}
+	opts = append(opts, cfg.Options...)
+	client := openai.NewClient(opts...)
+	return &openAIModel{client: &client, name: modelName}, nil
 }
 
 func (m *openAIModel) Name() string { return m.name }
@@ -88,6 +112,11 @@ func (m *openAIModel) generateStream(ctx context.Context, params responses.Respo
 			yield(nil, ErrStreamingUnavailable)
 			return
 		}
+		defer func() {
+			if err := stream.Close(); err != nil {
+				yield(nil, err)
+			}
+		}()
 		if err := stream.Err(); err != nil {
 			yield(nil, err)
 			return
@@ -96,8 +125,19 @@ func (m *openAIModel) generateStream(ctx context.Context, params responses.Respo
 		aggregator := llminternal.NewStreamingResponseAggregator()
 		translator := newStreamTranslator()
 
+		var openaiResp *responses.Response
+
 		for stream.Next() {
 			event := stream.Current()
+			switch event.Type {
+			case "response.created":
+				created := event.AsResponseCreated()
+				openaiResp = &created.Response
+			case "response.completed":
+				completed := event.AsResponseCompleted()
+				openaiResp = &completed.Response
+			}
+
 			// First, we convert the OpenAI streaming event format to our generic genai.GenerateContentResponse format.
 			genaiResp, err := translator.process(event)
 			if err != nil {
@@ -109,6 +149,9 @@ func (m *openAIModel) generateStream(ctx context.Context, params responses.Respo
 			}
 			// Then, we accumulate the streaming responses and yield them as discrete LLMResponses.
 			for resp, err := range aggregator.ProcessResponse(ctx, genaiResp) {
+				if err == nil && openaiResp != nil {
+					attachMetadata(resp, openaiResp)
+				}
 				if !yield(resp, err) {
 					return
 				}
@@ -118,11 +161,11 @@ func (m *openAIModel) generateStream(ctx context.Context, params responses.Respo
 			yield(nil, err)
 			return
 		}
-		if err := stream.Close(); err != nil {
-			yield(nil, err)
-			return
-		}
+
 		if final := aggregator.Close(); final != nil {
+			if openaiResp != nil {
+				attachMetadata(final, openaiResp)
+			}
 			yield(final, nil)
 		}
 	}

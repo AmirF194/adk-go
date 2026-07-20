@@ -26,4 +26,4 @@
 //	if err != nil {
 //		log.Fatal(err)
 //	}
-package openai
+package openaimodel

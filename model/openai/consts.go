@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openai
+package openaimodel
 
 const (
 	// Event types
@@ -28,4 +28,6 @@ const (
 	responseInProgress                 = "response.in_progress"
 	responseOutputItemAdded            = "response.output_item.added"
 	responseOutputItemDone             = "response.output_item.done"
+	responseFailed                     = "response.failed"
+	errorEvent                         = "error"
 )
