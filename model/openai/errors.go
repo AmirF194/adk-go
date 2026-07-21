@@ -39,6 +39,8 @@ var (
 	ErrLabelsNotSupported = errors.New("openai: request labels are not supported")
 	// ErrSafetySettingsNotSupported is returned when Gemini safety settings are used, which is not supported.
 	ErrSafetySettingsNotSupported = errors.New("openai: gemini safety settings are not supported")
+	// ErrUnsupportedMIMEType is returned when an unsupported MIME type is used.
+	ErrUnsupportedMIMEType = errors.New("openai: unsupported mime type")
 	// ErrJSONResponseWithoutSchema is returned when a JSON response is requested without a schema.
 	ErrJSONResponseWithoutSchema = errors.New("openai: json response requested without schema")
 	// ErrEmptyJSONSchema is returned when an empty JSON schema is provided.
@@ -47,6 +49,10 @@ var (
 	ErrEmptyResponse = errors.New("openai: empty response")
 	// ErrNoOutputItems is returned when the response contains no output items.
 	ErrNoOutputItems = errors.New("openai: response included no output items")
+	// ErrUnsupportedMessageContentType is returned when an unsupported message content type is used.
+	ErrUnsupportedMessageContentType = errors.New("openai: unsupported message content type")
+	// ErrUnsupportedOutputItemType is returned when an unsupported output item type is used.
+	ErrUnsupportedOutputItemType = errors.New("openai: unsupported output item type")
 	// ErrNoTextOrToolContent is returned when the response output does not contain text or tool content.
 	ErrNoTextOrToolContent = errors.New("openai: response output did not contain text or tool content")
 )

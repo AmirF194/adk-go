@@ -78,7 +78,7 @@ func convertOutputItems(items []responses.ResponseOutputItemUnion) ([]*genai.Par
 				case "refusal":
 					parts = append(parts, &genai.Part{Text: content.Refusal})
 				default:
-					return nil, fmt.Errorf("openai: unsupported message content type %q", content.Type)
+					return nil, fmt.Errorf("%w: %q", ErrUnsupportedMessageContentType, content.Type)
 				}
 			}
 		case "function_call":
@@ -100,7 +100,7 @@ func convertOutputItems(items []responses.ResponseOutputItemUnion) ([]*genai.Par
 				}
 			}
 		default:
-			return nil, fmt.Errorf("openai: unsupported output item type %q", item.Type)
+			return nil, fmt.Errorf("%w: %q", ErrUnsupportedOutputItemType, item.Type)
 		}
 	}
 	if len(parts) == 0 {

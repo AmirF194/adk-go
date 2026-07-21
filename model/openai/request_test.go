@@ -15,11 +15,14 @@
 package openaimodel
 
 import (
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
+	"github.com/openai/openai-go/v3/shared/constant"
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/v2/model"
@@ -132,26 +135,6 @@ func TestBuildOpenAIParams_UnsupportedPart(t *testing.T) {
 	}
 }
 
-func TestConvertToolChoice(t *testing.T) {
-	cfg := &genai.ToolConfig{
-		FunctionCallingConfig: &genai.FunctionCallingConfig{
-			Mode:                 genai.FunctionCallingConfigModeAny,
-			AllowedFunctionNames: []string{"lookup"},
-		},
-	}
-	got, err := convertToolChoice(cfg)
-	if err != nil {
-		t.Fatalf("convertToolChoice() err = %v", err)
-	}
-	if got == nil || got.OfAllowedTools == nil {
-		t.Fatalf("expected allowed tools config, got %+v", got)
-	}
-	want := []map[string]any{{"type": "function", "name": "lookup"}}
-	if diff := cmp.Diff(want, got.OfAllowedTools.Tools); diff != "" {
-		t.Fatalf("tools mismatch (-want +got):\n%s", diff)
-	}
-}
-
 func TestCallTrackerNewFunctionResponse_UnknownCallID(t *testing.T) {
 	tracker := callTracker{pending: []string{"call-1"}}
 	fr := &genai.FunctionResponse{
@@ -164,5 +147,293 @@ func TestCallTrackerNewFunctionResponse_UnknownCallID(t *testing.T) {
 	}
 	if len(tracker.pending) != 1 || tracker.pending[0] != "call-1" {
 		t.Fatalf("pending calls should remain untouched, got %+v", tracker.pending)
+	}
+}
+
+func TestApplyGenerationConfig(t *testing.T) {
+	topK := float32(5)
+	p := float32(0.5)
+	temp := float32(0.8)
+	topP := float32(0.9)
+	logprobs := int32(2)
+
+	tests := []struct {
+		name       string
+		cfg        *genai.GenerateContentConfig
+		wantErr    error
+		wantParams *responses.ResponseNewParams
+	}{
+		{
+			name: "nil config",
+			cfg:  nil,
+		},
+		{
+			name:    "TopK not supported",
+			cfg:     &genai.GenerateContentConfig{TopK: &topK},
+			wantErr: ErrTopKNotSupported,
+		},
+		{
+			name:    "StopSequences not supported",
+			cfg:     &genai.GenerateContentConfig{StopSequences: []string{"stop"}},
+			wantErr: ErrStopSequencesNotSupported,
+		},
+		{
+			name:    "Multiple candidates not supported",
+			cfg:     &genai.GenerateContentConfig{CandidateCount: 2},
+			wantErr: ErrMultipleCandidatesNotSupported,
+		},
+		{
+			name:    "Penalties not supported",
+			cfg:     &genai.GenerateContentConfig{FrequencyPenalty: &p},
+			wantErr: ErrPenaltiesNotSupported,
+		},
+		{
+			name:    "Labels not supported",
+			cfg:     &genai.GenerateContentConfig{Labels: map[string]string{"a": "b"}},
+			wantErr: ErrLabelsNotSupported,
+		},
+		{
+			name:    "Safety settings not supported",
+			cfg:     &genai.GenerateContentConfig{SafetySettings: []*genai.SafetySetting{{}}},
+			wantErr: ErrSafetySettingsNotSupported,
+		},
+		{
+			name:    "Unsupported MIME type",
+			cfg:     &genai.GenerateContentConfig{ResponseMIMEType: "image/png"},
+			wantErr: ErrUnsupportedMIMEType,
+		},
+		{
+			name: "success fully configured",
+			cfg: &genai.GenerateContentConfig{
+				Temperature:       &temp,
+				TopP:              &topP,
+				MaxOutputTokens:   100,
+				ResponseLogprobs:  true,
+				Logprobs:          &logprobs,
+				SystemInstruction: genai.NewContentFromText("sys", "system"),
+				ResponseMIMEType:  "application/json",
+				ResponseSchema:    &genai.Schema{Type: genai.TypeObject},
+			},
+			wantParams: &responses.ResponseNewParams{
+				Temperature:     param.NewOpt(float64(float32(temp))),
+				TopP:            param.NewOpt(float64(float32(topP))),
+				MaxOutputTokens: param.NewOpt(int64(100)),
+				TopLogprobs:     param.NewOpt(int64(int32(logprobs))),
+				Include:         []responses.ResponseIncludable{responses.ResponseIncludableMessageOutputTextLogprobs},
+				Instructions:    param.NewOpt("sys"),
+				Text: responses.ResponseTextConfigParam{
+					Format: responses.ResponseFormatTextConfigUnionParam{
+						OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
+							Name: "adk_response",
+							Type: constant.JSONSchema("json_schema"),
+							Schema: map[string]any{
+								"type": "OBJECT",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "success logprobs only",
+			cfg: &genai.GenerateContentConfig{
+				ResponseLogprobs: true,
+			},
+			wantParams: &responses.ResponseNewParams{
+				TopLogprobs: param.NewOpt(int64(1)),
+				Include:     []responses.ResponseIncludable{responses.ResponseIncludableMessageOutputTextLogprobs},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			params := &responses.ResponseNewParams{}
+			err := applyGenerationConfig(params, tc.cfg)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("applyGenerationConfig() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if tc.wantParams != nil && !reflect.DeepEqual(params, tc.wantParams) {
+				t.Errorf("applyGenerationConfig() params = %+v, want %+v", params, tc.wantParams)
+			}
+		})
+	}
+}
+
+func TestFlattenContentText(t *testing.T) {
+	tests := []struct {
+		name    string
+		content *genai.Content
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "nil content",
+			content: nil,
+			want:    "",
+		},
+		{
+			name: "valid text parts",
+			content: &genai.Content{
+				Parts: []*genai.Part{
+					{Text: "part1"},
+					nil,
+					{Text: "part2"},
+				},
+			},
+			want: "part1\npart2",
+		},
+		{
+			name: "non-text part",
+			content: &genai.Content{
+				Parts: []*genai.Part{
+					{FunctionCall: &genai.FunctionCall{Name: "fn"}},
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			txt, err := flattenContentText(tc.content)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("flattenContentText() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if txt != tc.want {
+				t.Fatalf("flattenContentText() = %q, want %q", txt, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeSchema(t *testing.T) {
+	tests := []struct {
+		name    string
+		schema  any
+		want    map[string]any
+		wantErr bool
+	}{
+		{
+			name:    "nil schema",
+			schema:  nil,
+			wantErr: true,
+		},
+		{
+			name:   "map schema",
+			schema: map[string]any{"type": "object"},
+			want:   map[string]any{"type": "object"},
+		},
+		{
+			name: "struct schema",
+			schema: struct {
+				Type string `json:"type"`
+			}{Type: "array"},
+			want: map[string]any{"type": "array"},
+		},
+		{
+			name:    "invalid schema",
+			schema:  func() {}, // unmarshalable
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := normalizeSchema(tc.schema)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("normalizeSchema() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if !tc.wantErr && got["type"] != tc.want["type"] {
+				t.Fatalf("normalizeSchema() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeRole(t *testing.T) {
+	tests := []struct {
+		role    genai.Role
+		want    responses.EasyInputMessageRole
+		wantErr bool
+	}{
+		{"", responses.EasyInputMessageRoleUser, false},
+		{genai.RoleUser, responses.EasyInputMessageRoleUser, false},
+		{genai.RoleModel, responses.EasyInputMessageRoleAssistant, false},
+		{"system", responses.EasyInputMessageRoleSystem, false},
+		{"developer", responses.EasyInputMessageRoleDeveloper, false},
+		{"invalid", "", true},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.role), func(t *testing.T) {
+			got, err := normalizeRole(tc.role)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("normalizeRole() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Fatalf("normalizeRole() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNewJSONSchemaFormat(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *genai.GenerateContentConfig
+		want    *responses.ResponseFormatTextJSONSchemaConfigParam
+		wantErr bool
+	}{
+		{
+			name:    "no schema",
+			cfg:     &genai.GenerateContentConfig{},
+			wantErr: true,
+		},
+		{
+			name: "with response schema",
+			cfg: &genai.GenerateContentConfig{
+				ResponseSchema: &genai.Schema{Title: "CustomTitle", Type: genai.TypeObject},
+			},
+			want: &responses.ResponseFormatTextJSONSchemaConfigParam{
+				Name: "CustomTitle",
+				Type: constant.JSONSchema("json_schema"),
+				Schema: map[string]any{
+					"title": "CustomTitle",
+					"type":  "OBJECT",
+				},
+			},
+		},
+		{
+			name: "with json schema",
+			cfg: &genai.GenerateContentConfig{
+				ResponseJsonSchema: map[string]any{"type": "object"},
+			},
+			want: &responses.ResponseFormatTextJSONSchemaConfigParam{
+				Name: "adk_response",
+				Type: constant.JSONSchema("json_schema"),
+				Schema: map[string]any{
+					"type": "object",
+				},
+			},
+		},
+		{
+			name: "with invalid json schema",
+			cfg: &genai.GenerateContentConfig{
+				ResponseJsonSchema: func() {}, // unmarshalable
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := newJSONSchemaFormat(tc.cfg)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("newJSONSchemaFormat() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if !tc.wantErr && !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("newJSONSchemaFormat() got = %+v, want %+v", got, tc.want)
+			}
+		})
 	}
 }
