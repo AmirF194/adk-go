@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/openai/openai-go/v3/responses"
+	"google.golang.org/genai"
 )
 
 func TestConvertResponse_Text(t *testing.T) {
@@ -76,5 +77,116 @@ func TestConvertResponse_NoOutput(t *testing.T) {
 	_, err := convertResponse(&responses.Response{})
 	if err == nil {
 		t.Fatalf("expected error for empty output")
+	}
+}
+
+func TestConvertResponse_Logprobs(t *testing.T) {
+	tests := []struct {
+		name       string
+		logprobs   []responses.ResponseOutputTextLogprob
+		wantResult *genai.LogprobsResult
+	}{
+		{
+			name:       "empty config",
+			logprobs:   nil,
+			wantResult: nil,
+		},
+		{
+			name: "fully specified",
+			logprobs: []responses.ResponseOutputTextLogprob{
+				{
+					Token:   "hel",
+					Logprob: -0.1,
+					TopLogprobs: []responses.ResponseOutputTextLogprobTopLogprob{
+						{Token: "hel", Logprob: -0.1},
+						{Token: "hi", Logprob: -2.3},
+					},
+				},
+				{
+					Token:   "lo",
+					Logprob: -0.2,
+				},
+			},
+			wantResult: &genai.LogprobsResult{
+				ChosenCandidates: []*genai.LogprobsResultCandidate{
+					{Token: "hel", LogProbability: -0.1},
+					{Token: "lo", LogProbability: -0.2},
+				},
+				TopCandidates: []*genai.LogprobsResultTopCandidates{
+					{
+						Candidates: []*genai.LogprobsResultCandidate{
+							{Token: "hel", LogProbability: -0.1},
+							{Token: "hi", LogProbability: -2.3},
+						},
+					},
+					{
+						Candidates: nil,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := &responses.Response{
+				ID:    "resp-1",
+				Model: "gpt-test",
+				Output: []responses.ResponseOutputItemUnion{
+					{
+						Type: "message",
+						Content: []responses.ResponseOutputMessageContentUnion{
+							{
+								Type:     "output_text",
+								Text:     "hello",
+								Logprobs: tc.logprobs,
+							},
+						},
+					},
+				},
+			}
+			got, err := convertResponse(resp)
+			if err != nil {
+				t.Fatalf("convertResponse() err = %v", err)
+			}
+			if got.Candidates == nil {
+				t.Fatalf("expected candidates")
+			}
+			cand := got.Candidates[0]
+			if diff := cmp.Diff(tc.wantResult, cand.LogprobsResult); diff != "" {
+				t.Errorf("LogprobsResult mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConvertResponse_IncompleteDetails(t *testing.T) {
+	resp := &responses.Response{
+		ID:    "resp-1",
+		Model: "gpt-test",
+		Output: []responses.ResponseOutputItemUnion{
+			{
+				Type: "message",
+				Content: []responses.ResponseOutputMessageContentUnion{
+					{Type: "output_text", Text: "hello"},
+				},
+			},
+		},
+		IncompleteDetails: responses.ResponseIncompleteDetails{
+			Reason: "max_output_tokens",
+		},
+	}
+	got, err := convertResponse(resp)
+	if err != nil {
+		t.Fatalf("convertResponse() err = %v", err)
+	}
+	if got.PromptFeedback != nil {
+		t.Errorf("expected PromptFeedback to be nil, got: %+v", got.PromptFeedback)
+	}
+	if got.Candidates == nil {
+		t.Fatalf("expected candidates")
+	}
+	if got.Candidates[0].FinishReason != genai.FinishReasonMaxTokens {
+		t.Errorf("expected FinishReasonMaxTokens, got: %v", got.Candidates[0].FinishReason)
 	}
 }

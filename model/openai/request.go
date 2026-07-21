@@ -307,6 +307,8 @@ func applyGenerationConfig(params *responses.ResponseNewParams, cfg *genai.Gener
 		} else {
 			params.TopLogprobs = param.NewOpt(int64(1))
 		}
+		// Responses returns logprobs only when explicitly included.
+		params.Include = append(params.Include, responses.ResponseIncludableMessageOutputTextLogprobs)
 	}
 	if cfg.SystemInstruction != nil {
 		inst, err := flattenContentText(cfg.SystemInstruction)

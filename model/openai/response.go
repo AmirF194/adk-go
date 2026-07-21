@@ -51,7 +51,8 @@ func buildCandidate(resp *responses.Response) (*genai.Candidate, error) {
 			Role:  string(genai.RoleModel),
 			Parts: parts,
 		},
-		FinishReason: finishReason(resp),
+		FinishReason:   finishReason(resp),
+		LogprobsResult: convertLogprobs(resp.Output),
 	}, nil
 }
 
@@ -157,11 +158,46 @@ func convertUsage(usage responses.ResponseUsage) *genai.GenerateContentResponseU
 }
 
 func promptFeedback(resp *responses.Response) *genai.GenerateContentResponsePromptFeedback {
-	if resp == nil || resp.IncompleteDetails.Reason == "" {
+	if resp == nil || resp.IncompleteDetails.Reason != "content_filter" {
 		return nil
 	}
 	return &genai.GenerateContentResponsePromptFeedback{
 		BlockReason:        genai.BlockedReason(resp.IncompleteDetails.Reason),
 		BlockReasonMessage: resp.IncompleteDetails.Reason,
 	}
+}
+
+func convertLogprobs(items []responses.ResponseOutputItemUnion) *genai.LogprobsResult {
+	if len(items) == 0 {
+		return nil
+	}
+	var res *genai.LogprobsResult
+	for _, item := range items {
+		if item.Type == "message" {
+			for _, content := range item.Content {
+				if content.Type == "output_text" && len(content.Logprobs) > 0 {
+					if res == nil {
+						res = &genai.LogprobsResult{}
+					}
+					for _, lp := range content.Logprobs {
+						res.ChosenCandidates = append(res.ChosenCandidates, &genai.LogprobsResultCandidate{
+							Token:          lp.Token,
+							LogProbability: float32(lp.Logprob),
+						})
+						var topCands []*genai.LogprobsResultCandidate
+						for _, tlp := range lp.TopLogprobs {
+							topCands = append(topCands, &genai.LogprobsResultCandidate{
+								Token:          tlp.Token,
+								LogProbability: float32(tlp.Logprob),
+							})
+						}
+						res.TopCandidates = append(res.TopCandidates, &genai.LogprobsResultTopCandidates{
+							Candidates: topCands,
+						})
+					}
+				}
+			}
+		}
+	}
+	return res
 }
