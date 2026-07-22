@@ -47,15 +47,19 @@ func TestStreamTranslator_TextDelta(t *testing.T) {
 
 func TestStreamTranslator_FunctionCall(t *testing.T) {
 	tr := newStreamTranslator()
-	delta := decodeEvent(t, `{"type":"response.function_call_arguments.delta","item_id":"call-1","delta":"{\"city\":\""}`)
+	added := decodeEvent(t, `{"type":"response.output_item.added","item":{"type":"function_call","id":"fc_1","call_id":"call_real"}}`)
+	if _, err := tr.process(added); err != nil {
+		t.Fatalf("process(added) err = %v", err)
+	}
+	delta := decodeEvent(t, `{"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{\"city\":\""}`)
 	if _, err := tr.process(delta); err != nil {
 		t.Fatalf("process(delta) err = %v", err)
 	}
-	delta = decodeEvent(t, `{"type":"response.function_call_arguments.delta","item_id":"call-1","delta":"Paris\"}"}`)
+	delta = decodeEvent(t, `{"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"Paris\"}"}`)
 	if _, err := tr.process(delta); err != nil {
 		t.Fatalf("process(delta) err = %v", err)
 	}
-	done := decodeEvent(t, `{"type":"response.function_call_arguments.done","item_id":"call-1","name":"lookup","arguments":""}`)
+	done := decodeEvent(t, `{"type":"response.function_call_arguments.done","item_id":"fc_1","name":"lookup","arguments":""}`)
 	resp, err := tr.process(done)
 	if err != nil {
 		t.Fatalf("process(done) err = %v", err)
@@ -66,6 +70,9 @@ func TestStreamTranslator_FunctionCall(t *testing.T) {
 	}
 	if part.FunctionCall.Args["city"] != "Paris" {
 		t.Fatalf("args mismatch: %+v", part.FunctionCall.Args)
+	}
+	if part.FunctionCall.ID != "call_real" {
+		t.Fatalf("call ID mismatch, got %q, want %q", part.FunctionCall.ID, "call_real")
 	}
 }
 

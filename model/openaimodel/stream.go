@@ -27,11 +27,13 @@ import (
 // function arguments until a complete function call is received.
 type streamTranslator struct {
 	functionArgs map[string]*strings.Builder
+	itemToCallID map[string]string
 }
 
 func newStreamTranslator() *streamTranslator {
 	return &streamTranslator{
 		functionArgs: make(map[string]*strings.Builder),
+		itemToCallID: make(map[string]string),
 	}
 }
 
@@ -86,12 +88,17 @@ func (t *streamTranslator) process(evt responses.ResponseStreamEventUnion) (*gen
 			return nil, fmt.Errorf("openai stream error: %s", evt.Message)
 		}
 		return nil, fmt.Errorf("openai stream error")
+	case responseOutputItemAdded:
+		added := evt.AsResponseOutputItemAdded()
+		if added.Item.ID != "" && added.Item.CallID != "" {
+			t.itemToCallID[added.Item.ID] = added.Item.CallID
+		}
+		return nil, nil
 	case responseOutputTextDone,
 		responseReasoningTextDone,
 		responseReasoningSummaryTextDone,
 		responseCompleted,
 		responseInProgress,
-		responseOutputItemAdded,
 		responseOutputItemDone:
 		// These are informational events that don't directly translate to a new part.
 		return nil, nil
@@ -127,6 +134,13 @@ func (t *streamTranslator) emitFunctionCall(done responses.ResponseFunctionCallA
 		}
 	}
 	delete(t.functionArgs, done.ItemID)
+
+	callID := done.ItemID
+	if mapped, ok := t.itemToCallID[done.ItemID]; ok {
+		callID = mapped
+	}
+	delete(t.itemToCallID, done.ItemID)
+
 	if payload == "" {
 		payload = "{}"
 	}
@@ -137,7 +151,7 @@ func (t *streamTranslator) emitFunctionCall(done responses.ResponseFunctionCallA
 	return &genai.Part{
 		FunctionCall: &genai.FunctionCall{
 			Name: done.Name,
-			ID:   done.ItemID,
+			ID:   callID,
 			Args: args,
 		},
 	}, nil

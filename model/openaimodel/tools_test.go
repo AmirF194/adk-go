@@ -213,7 +213,7 @@ func TestSchemaToMap(t *testing.T) {
 		{
 			name:   "string type",
 			schema: &genai.Schema{Type: genai.TypeString},
-			want:   map[string]any{"type": "STRING"}, // Marshals as "STRING" if using standard json
+			want:   map[string]any{"type": "string"}, // Marshals as "STRING" if using standard json, but we lower it
 		},
 		{
 			name:    "invalid type",

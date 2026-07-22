@@ -47,6 +47,8 @@ type openAIModel struct {
 	name   string
 }
 
+// NewModel constructs a new openAIModel.
+// The context is unused but kept for signature parity with other model constructors (e.g., gemini.NewModel).
 func NewModel(_ context.Context, modelName string, cfg *ClientConfig) (model.LLM, error) {
 	if modelName == "" {
 		return nil, ErrModelNameRequired
@@ -108,19 +110,7 @@ func (m *openAIModel) generate(ctx context.Context, params responses.ResponseNew
 func (m *openAIModel) generateStream(ctx context.Context, params responses.ResponseNewParams) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
 		stream := m.client.Responses.NewStreaming(ctx, params)
-		if stream == nil {
-			yield(nil, ErrStreamingUnavailable)
-			return
-		}
-		defer func() {
-			if err := stream.Close(); err != nil {
-				yield(nil, err)
-			}
-		}()
-		if err := stream.Err(); err != nil {
-			yield(nil, err)
-			return
-		}
+		defer func() { _ = stream.Close() }()
 
 		aggregator := llminternal.NewStreamingResponseAggregator()
 		translator := newStreamTranslator()
@@ -165,8 +155,11 @@ func (m *openAIModel) generateStream(ctx context.Context, params responses.Respo
 		if final := aggregator.Close(); final != nil {
 			if openaiResp != nil {
 				attachMetadata(final, openaiResp)
+				final.UsageMetadata = convertUsage(openaiResp.Usage)
 			}
-			yield(final, nil)
+			if !yield(final, nil) {
+				return
+			}
 		}
 	}
 }

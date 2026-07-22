@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package openai provides a client for interacting with OpenAI's API.
+// Package openaimodel provides a client for interacting with OpenAI's API.
 // It implements the model.LLM interface, making it compatible with
 // providers that expose the OpenAI Responses API surface. This package
 // allows for easy integration of OpenAI's language models into applications.
 //
-// Clients construct a github.com/openai/openai-go/v3 client directly and pass
-// it to NewModel:
+// Clients construct a ClientConfig and pass it to NewModel:
 //
 //	ctx := context.Background()
-//	client := openai.NewClient(option.WithAPIKey(os.Getenv("OPENAI_API_KEY")))
-//	llm, err := openaimodel.NewModel(ctx, openai.ChatModelGPT4oMini, client)
+//	cfg := &openaimodel.ClientConfig{APIKey: os.Getenv("OPENAI_API_KEY")}
+//	llm, err := openaimodel.NewModel(ctx, openai.ChatModelGPT4oMini, cfg)
 //	if err != nil {
 //		log.Fatal(err)
 //	}

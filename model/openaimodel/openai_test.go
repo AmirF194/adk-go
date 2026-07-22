@@ -107,6 +107,7 @@ func TestModel_GenerateStream_Metadata(t *testing.T) {
 	}
 
 	var chunks int
+	var finalResp *model.LLMResponse
 	for resp, err := range llm.GenerateContent(ctx, req, true) {
 		if err != nil {
 			t.Fatalf("GenerateContent() stream err = %v", err)
@@ -118,11 +119,18 @@ func TestModel_GenerateStream_Metadata(t *testing.T) {
 		if resp.CustomMetadata["openai_model"] != "stream-model" {
 			t.Errorf("expected chunk to have openai_model='stream-model', got %v", resp.CustomMetadata["openai_model"])
 		}
+		finalResp = resp
 	}
 
 	// Expect the partial chunk and the final aggregated response
 	if chunks != 2 {
 		t.Errorf("expected 2 chunks from stream, got %d", chunks)
+	}
+	if finalResp == nil || finalResp.UsageMetadata == nil {
+		t.Fatal("expected final stream response to have UsageMetadata, got nil")
+	}
+	if finalResp.UsageMetadata.TotalTokenCount != 10 {
+		t.Errorf("expected final UsageMetadata.TotalTokenCount=10, got %d", finalResp.UsageMetadata.TotalTokenCount)
 	}
 }
 

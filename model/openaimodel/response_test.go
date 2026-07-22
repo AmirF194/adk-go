@@ -392,9 +392,18 @@ func TestPromptFeedback(t *testing.T) {
 				},
 			},
 			want: &genai.GenerateContentResponsePromptFeedback{
-				BlockReason:        "content_filter",
+				BlockReason:        genai.BlockedReasonSafety,
 				BlockReasonMessage: "content_filter",
 			},
+		},
+		{
+			name: "max_output_tokens",
+			resp: &responses.Response{
+				IncompleteDetails: responses.ResponseIncompleteDetails{
+					Reason: "max_output_tokens",
+				},
+			},
+			want: nil,
 		},
 		{
 			name: "nil response",

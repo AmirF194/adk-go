@@ -17,6 +17,7 @@ package openaimodel
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 
 	"github.com/openai/openai-go/v3/responses"
 	"google.golang.org/genai"
@@ -141,19 +142,26 @@ func finishReason(resp *responses.Response) genai.FinishReason {
 	}
 }
 
+func safeInt32(v int64) int32 {
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(v)
+}
+
 func convertUsage(usage responses.ResponseUsage) *genai.GenerateContentResponseUsageMetadata {
 	return &genai.GenerateContentResponseUsageMetadata{
-		PromptTokenCount:        int32(usage.InputTokens),
-		CandidatesTokenCount:    int32(usage.OutputTokens),
-		TotalTokenCount:         int32(usage.TotalTokens),
-		CachedContentTokenCount: int32(usage.InputTokensDetails.CachedTokens),
+		PromptTokenCount:        safeInt32(usage.InputTokens),
+		CandidatesTokenCount:    safeInt32(usage.OutputTokens),
+		TotalTokenCount:         safeInt32(usage.TotalTokens),
+		CachedContentTokenCount: safeInt32(usage.InputTokensDetails.CachedTokens),
 		PromptTokensDetails: []*genai.ModalityTokenCount{
-			{Modality: genai.MediaModalityText, TokenCount: int32(usage.InputTokens)},
+			{Modality: genai.MediaModalityText, TokenCount: safeInt32(usage.InputTokens)},
 		},
 		CandidatesTokensDetails: []*genai.ModalityTokenCount{
-			{Modality: genai.MediaModalityText, TokenCount: int32(usage.OutputTokens)},
+			{Modality: genai.MediaModalityText, TokenCount: safeInt32(usage.OutputTokens)},
 		},
-		ThoughtsTokenCount: int32(usage.OutputTokensDetails.ReasoningTokens),
+		ThoughtsTokenCount: safeInt32(usage.OutputTokensDetails.ReasoningTokens),
 	}
 }
 
@@ -162,7 +170,7 @@ func promptFeedback(resp *responses.Response) *genai.GenerateContentResponseProm
 		return nil
 	}
 	return &genai.GenerateContentResponsePromptFeedback{
-		BlockReason:        genai.BlockedReason(resp.IncompleteDetails.Reason),
+		BlockReason:        genai.BlockedReasonSafety,
 		BlockReasonMessage: resp.IncompleteDetails.Reason,
 	}
 }

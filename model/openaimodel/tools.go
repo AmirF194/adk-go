@@ -17,6 +17,7 @@ package openaimodel
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
@@ -96,7 +97,6 @@ func convertFunctionDeclaration(fn *genai.FunctionDeclaration) (*responses.Funct
 		Name:       fn.Name,
 		Type:       constant.Function("function"),
 		Parameters: paramsMap,
-		Strict:     param.NewOpt(true),
 	}
 	if fn.Description != "" {
 		fnParam.Description = param.NewOpt(fn.Description)
@@ -179,5 +179,31 @@ func schemaToMap(schema *genai.Schema) (map[string]any, error) {
 	if err := json.Unmarshal(bytes, &result); err != nil {
 		return nil, fmt.Errorf("openai: unmarshal schema: %w", err)
 	}
+	lowercaseSchemaTypes(result)
 	return result, nil
+}
+
+func lowercaseSchemaTypes(val any) {
+	switch v := val.(type) {
+	case map[string]any:
+		if t, ok := v["type"]; ok {
+			switch tVal := t.(type) {
+			case string:
+				v["type"] = strings.ToLower(tVal)
+			case []any:
+				for i, item := range tVal {
+					if str, ok := item.(string); ok {
+						tVal[i] = strings.ToLower(str)
+					}
+				}
+			}
+		}
+		for _, child := range v {
+			lowercaseSchemaTypes(child)
+		}
+	case []any:
+		for _, child := range v {
+			lowercaseSchemaTypes(child)
+		}
+	}
 }

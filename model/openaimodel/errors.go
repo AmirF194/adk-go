@@ -21,8 +21,6 @@ var (
 	ErrModelNameRequired = errors.New("openai: model name is required")
 	// ErrRequestNil is returned when the provided request is nil.
 	ErrRequestNil = errors.New("openai: request is nil")
-	// ErrStreamingUnavailable is returned when streaming is requested but not available.
-	ErrStreamingUnavailable = errors.New("openai: streaming unavailable")
 	// ErrNoContents is returned when the LLM request has no contents.
 	ErrNoContents = errors.New("openai: LLM request has no contents to convert")
 	// ErrFunctionCallMissingName is returned when a function call is missing a name.
@@ -41,8 +39,7 @@ var (
 	ErrSafetySettingsNotSupported = errors.New("openai: gemini safety settings are not supported")
 	// ErrUnsupportedMIMEType is returned when an unsupported MIME type is used.
 	ErrUnsupportedMIMEType = errors.New("openai: unsupported mime type")
-	// ErrJSONResponseWithoutSchema is returned when a JSON response is requested without a schema.
-	ErrJSONResponseWithoutSchema = errors.New("openai: json response requested without schema")
+
 	// ErrEmptyJSONSchema is returned when an empty JSON schema is provided.
 	ErrEmptyJSONSchema = errors.New("openai: empty json schema")
 	// ErrEmptyResponse is returned when the OpenAI API returns an empty response.

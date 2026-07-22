@@ -22,6 +22,7 @@ import (
 
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
+	"github.com/openai/openai-go/v3/shared"
 	"github.com/openai/openai-go/v3/shared/constant"
 	"google.golang.org/genai"
 
@@ -100,9 +101,9 @@ func TestBuildOpenAIParams_JSONSchema(t *testing.T) {
 		Config: &genai.GenerateContentConfig{
 			ResponseMIMEType: "application/json",
 			ResponseSchema: &genai.Schema{
-				Type: "object",
+				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
-					"answer": {Type: "string"},
+					"answer": {Type: genai.TypeString},
 				},
 			},
 		},
@@ -227,8 +228,23 @@ func TestApplyGenerationConfig(t *testing.T) {
 							Name: "adk_response",
 							Type: constant.JSONSchema("json_schema"),
 							Schema: map[string]any{
-								"type": "OBJECT",
+								"type": "object",
 							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "success application/json without schema falls back to json_object",
+			cfg: &genai.GenerateContentConfig{
+				ResponseMIMEType: "application/json",
+			},
+			wantParams: &responses.ResponseNewParams{
+				Text: responses.ResponseTextConfigParam{
+					Format: responses.ResponseFormatTextConfigUnionParam{
+						OfJSONObject: &shared.ResponseFormatJSONObjectParam{
+							Type: constant.JSONObject("json_object"),
 						},
 					},
 				},
@@ -399,7 +415,34 @@ func TestNewJSONSchemaFormat(t *testing.T) {
 				Type: constant.JSONSchema("json_schema"),
 				Schema: map[string]any{
 					"title": "CustomTitle",
-					"type":  "OBJECT",
+					"type":  "object",
+				},
+			},
+		},
+		{
+			name: "with nested response schema",
+			cfg: &genai.GenerateContentConfig{
+				ResponseSchema: &genai.Schema{
+					Title: "NestedTitle",
+					Type:  genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"sub": {
+							Type: genai.TypeString,
+						},
+					},
+				},
+			},
+			want: &responses.ResponseFormatTextJSONSchemaConfigParam{
+				Name: "NestedTitle",
+				Type: constant.JSONSchema("json_schema"),
+				Schema: map[string]any{
+					"title": "NestedTitle",
+					"type":  "object",
+					"properties": map[string]any{
+						"sub": map[string]any{
+							"type": "string",
+						},
+					},
 				},
 			},
 		},

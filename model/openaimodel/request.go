@@ -323,14 +323,23 @@ func applyGenerationConfig(params *responses.ResponseNewParams, cfg *genai.Gener
 		return fmt.Errorf("%w: %s", ErrUnsupportedMIMEType, cfg.ResponseMIMEType)
 	}
 	if cfg.ResponseMIMEType == "application/json" || cfg.ResponseSchema != nil || cfg.ResponseJsonSchema != nil {
-		format, err := newJSONSchemaFormat(cfg)
-		if err != nil {
-			return err
-		}
-		params.Text = responses.ResponseTextConfigParam{
-			Format: responses.ResponseFormatTextConfigUnionParam{
-				OfJSONSchema: format,
-			},
+		if cfg.ResponseSchema == nil && cfg.ResponseJsonSchema == nil {
+			obj := shared.NewResponseFormatJSONObjectParam()
+			params.Text = responses.ResponseTextConfigParam{
+				Format: responses.ResponseFormatTextConfigUnionParam{
+					OfJSONObject: &obj,
+				},
+			}
+		} else {
+			format, err := newJSONSchemaFormat(cfg)
+			if err != nil {
+				return err
+			}
+			params.Text = responses.ResponseTextConfigParam{
+				Format: responses.ResponseFormatTextConfigUnionParam{
+					OfJSONSchema: format,
+				},
+			}
 		}
 	}
 	if cfg.Labels != nil {
@@ -376,7 +385,7 @@ func newJSONSchemaFormat(cfg *genai.GenerateContentConfig) (*responses.ResponseF
 	case cfg.ResponseSchema != nil:
 		schema, err = schemaToMap(cfg.ResponseSchema)
 	default:
-		return nil, ErrJSONResponseWithoutSchema
+		return nil, fmt.Errorf("openai: json schema requested without schema")
 	}
 	if err != nil {
 		return nil, err
