@@ -28,7 +28,7 @@ import (
 	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/cmd/launcher"
 	"google.golang.org/adk/v2/cmd/launcher/full"
-	openaimodel "google.golang.org/adk/v2/model/openai"
+	openaimodel "google.golang.org/adk/v2/model/openaimodel"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
 )

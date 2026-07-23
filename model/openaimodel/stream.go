@@ -28,12 +28,14 @@ import (
 type streamTranslator struct {
 	functionArgs map[string]*strings.Builder
 	itemToCallID map[string]string
+	itemToName   map[string]string
 }
 
 func newStreamTranslator() *streamTranslator {
 	return &streamTranslator{
 		functionArgs: make(map[string]*strings.Builder),
 		itemToCallID: make(map[string]string),
+		itemToName:   make(map[string]string),
 	}
 }
 
@@ -93,6 +95,9 @@ func (t *streamTranslator) process(evt responses.ResponseStreamEventUnion) (*gen
 		if added.Item.ID != "" && added.Item.CallID != "" {
 			t.itemToCallID[added.Item.ID] = added.Item.CallID
 		}
+		if added.Item.ID != "" && added.Item.Name != "" {
+			t.itemToName[added.Item.ID] = added.Item.Name
+		}
 		return nil, nil
 	case responseOutputTextDone,
 		responseReasoningTextDone,
@@ -141,6 +146,12 @@ func (t *streamTranslator) emitFunctionCall(done responses.ResponseFunctionCallA
 	}
 	delete(t.itemToCallID, done.ItemID)
 
+	name := done.Name
+	if name == "" {
+		name = t.itemToName[done.ItemID]
+	}
+	delete(t.itemToName, done.ItemID)
+
 	if payload == "" {
 		payload = "{}"
 	}
@@ -150,7 +161,7 @@ func (t *streamTranslator) emitFunctionCall(done responses.ResponseFunctionCallA
 	}
 	return &genai.Part{
 		FunctionCall: &genai.FunctionCall{
-			Name: done.Name,
+			Name: name,
 			ID:   callID,
 			Args: args,
 		},

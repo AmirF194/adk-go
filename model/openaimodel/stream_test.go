@@ -106,3 +106,34 @@ func TestStreamTranslator_WithAggregator(t *testing.T) {
 		t.Fatalf("aggregated text mismatch got=%q", finalText)
 	}
 }
+
+func TestStreamTranslator_FunctionCall_MissingDoneName(t *testing.T) {
+	tr := newStreamTranslator()
+	added := decodeEvent(t, `{"type":"response.output_item.added","item":{"type":"function_call","id":"fc_1","call_id":"call_real","name":"lookup"}}`)
+	if _, err := tr.process(added); err != nil {
+		t.Fatalf("process(added) err = %v", err)
+	}
+	delta := decodeEvent(t, `{"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{\"city\":\""}`)
+	if _, err := tr.process(delta); err != nil {
+		t.Fatalf("process(delta) err = %v", err)
+	}
+	delta = decodeEvent(t, `{"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"Paris\"}"}`)
+	if _, err := tr.process(delta); err != nil {
+		t.Fatalf("process(delta) err = %v", err)
+	}
+	done := decodeEvent(t, `{"type":"response.function_call_arguments.done","item_id":"fc_1","arguments":""}`)
+	resp, err := tr.process(done)
+	if err != nil {
+		t.Fatalf("process(done) err = %v", err)
+	}
+	part := resp.Candidates[0].Content.Parts[0]
+	if part.FunctionCall == nil || part.FunctionCall.Name != "lookup" {
+		t.Fatalf("function call not translated: %+v", part)
+	}
+	if part.FunctionCall.Args["city"] != "Paris" {
+		t.Fatalf("args mismatch: %+v", part.FunctionCall.Args)
+	}
+	if part.FunctionCall.ID != "call_real" {
+		t.Fatalf("call ID mismatch, got %q, want %q", part.FunctionCall.ID, "call_real")
+	}
+}
