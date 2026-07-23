@@ -13,6 +13,10 @@
 // limitations under the License.
 
 // Package openaimodel provides a client for interacting with OpenAI's API.
+//
+// EXPERIMENTAL: This package is experimental and its behavior may change or be
+// removed in the future.
+//
 // It implements the model.LLM interface, making it compatible with
 // providers that expose the OpenAI Responses API surface. This package
 // allows for easy integration of OpenAI's language models into applications.
