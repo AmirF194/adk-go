@@ -225,8 +225,9 @@ func TestApplyGenerationConfig(t *testing.T) {
 				Text: responses.ResponseTextConfigParam{
 					Format: responses.ResponseFormatTextConfigUnionParam{
 						OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
-							Name: "adk_response",
-							Type: constant.JSONSchema("json_schema"),
+							Name:   "adk_response",
+							Strict: param.NewOpt(true),
+							Type:   constant.JSONSchema("json_schema"),
 							Schema: map[string]any{
 								"type": "object",
 							},
@@ -411,11 +412,27 @@ func TestNewJSONSchemaFormat(t *testing.T) {
 				ResponseSchema: &genai.Schema{Title: "CustomTitle", Type: genai.TypeObject},
 			},
 			want: &responses.ResponseFormatTextJSONSchemaConfigParam{
-				Name: "CustomTitle",
-				Type: constant.JSONSchema("json_schema"),
+				Name:   "CustomTitle",
+				Strict: param.NewOpt(true),
+				Type:   constant.JSONSchema("json_schema"),
 				Schema: map[string]any{
 					"title": "CustomTitle",
 					"type":  "object",
+				},
+			},
+		},
+
+		{
+			name: "with json schema",
+			cfg: &genai.GenerateContentConfig{
+				ResponseJsonSchema: map[string]any{"type": "object"},
+			},
+			want: &responses.ResponseFormatTextJSONSchemaConfigParam{
+				Name:   "adk_response",
+				Strict: param.NewOpt(true),
+				Type:   constant.JSONSchema("json_schema"),
+				Schema: map[string]any{
+					"type": "object",
 				},
 			},
 		},
@@ -426,36 +443,155 @@ func TestNewJSONSchemaFormat(t *testing.T) {
 					Title: "NestedTitle",
 					Type:  genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"sub": {
-							Type: genai.TypeString,
+						"b_string": {Type: genai.TypeString},
+						"a_object": {
+							Type: genai.TypeObject,
+							Properties: map[string]*genai.Schema{
+								"d_int":  {Type: genai.TypeInteger},
+								"c_bool": {Type: genai.TypeBoolean},
+							},
 						},
 					},
 				},
 			},
 			want: &responses.ResponseFormatTextJSONSchemaConfigParam{
-				Name: "NestedTitle",
-				Type: constant.JSONSchema("json_schema"),
+				Name:   "NestedTitle",
+				Strict: param.NewOpt(true),
+				Type:   constant.JSONSchema("json_schema"),
 				Schema: map[string]any{
-					"title": "NestedTitle",
-					"type":  "object",
+					"title":                "NestedTitle",
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"a_object", "b_string"},
 					"properties": map[string]any{
-						"sub": map[string]any{
+						"b_string": map[string]any{
 							"type": "string",
+						},
+						"a_object": map[string]any{
+							"type":                 "object",
+							"additionalProperties": false,
+							"required":             []string{"c_bool", "d_int"},
+							"properties": map[string]any{
+								"d_int": map[string]any{
+									"type": "integer",
+								},
+								"c_bool": map[string]any{
+									"type": "boolean",
+								},
+							},
 						},
 					},
 				},
 			},
 		},
 		{
-			name: "with json schema",
+			name: "with complex json schema for strict output",
 			cfg: &genai.GenerateContentConfig{
-				ResponseJsonSchema: map[string]any{"type": "object"},
+				ResponseJsonSchema: map[string]any{
+					"title": "NestedTitle",
+					"type":  "object",
+					"properties": map[string]any{
+						"b_string": map[string]any{"type": "string"},
+						"a_object": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"d_int":  map[string]any{"type": "integer"},
+								"c_bool": map[string]any{"type": "boolean"},
+							},
+						},
+						"c_array": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"e_float": map[string]any{"type": "number"},
+								},
+							},
+						},
+						"d_ref": map[string]any{
+							"$ref":        "#/$defs/my_def",
+							"description": "this should be deleted",
+						},
+					},
+					"$defs": map[string]any{
+						"my_def": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"f_string": map[string]any{"type": "string"},
+							},
+						},
+					},
+					"anyOf": []any{
+						map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"g_string": map[string]any{"type": "string"},
+							},
+						},
+					},
+				},
 			},
 			want: &responses.ResponseFormatTextJSONSchemaConfigParam{
-				Name: "adk_response",
-				Type: constant.JSONSchema("json_schema"),
+				Name:   "adk_response",
+				Strict: param.NewOpt(true),
+				Type:   constant.JSONSchema("json_schema"),
 				Schema: map[string]any{
-					"type": "object",
+					"title":                "NestedTitle",
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"a_object", "b_string", "c_array", "d_ref"},
+					"properties": map[string]any{
+						"b_string": map[string]any{
+							"type": "string",
+						},
+						"a_object": map[string]any{
+							"type":                 "object",
+							"additionalProperties": false,
+							"required":             []string{"c_bool", "d_int"},
+							"properties": map[string]any{
+								"d_int": map[string]any{
+									"type": "integer",
+								},
+								"c_bool": map[string]any{
+									"type": "boolean",
+								},
+							},
+						},
+						"c_array": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type":                 "object",
+								"additionalProperties": false,
+								"required":             []string{"e_float"},
+								"properties": map[string]any{
+									"e_float": map[string]any{"type": "number"},
+								},
+							},
+						},
+						"d_ref": map[string]any{
+							"$ref": "#/$defs/my_def",
+						},
+					},
+					"$defs": map[string]any{
+						"my_def": map[string]any{
+							"type":                 "object",
+							"additionalProperties": false,
+							"required":             []string{"f_string"},
+							"properties": map[string]any{
+								"f_string": map[string]any{"type": "string"},
+							},
+						},
+					},
+					"anyOf": []any{
+						map[string]any{
+							"type":                 "object",
+							"additionalProperties": false,
+							"required":             []string{"g_string"},
+							"properties": map[string]any{
+								"g_string": map[string]any{"type": "string"},
+							},
+						},
+					},
 				},
 			},
 		},

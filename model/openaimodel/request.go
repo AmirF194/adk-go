@@ -17,6 +17,7 @@ package openaimodel
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/openai/openai-go/v3/packages/param"
@@ -390,6 +391,7 @@ func newJSONSchemaFormat(cfg *genai.GenerateContentConfig) (*responses.ResponseF
 	if err != nil {
 		return nil, err
 	}
+	enforceStrictOpenAISchema(schema)
 	name := "adk_response"
 	if cfg.ResponseSchema != nil && cfg.ResponseSchema.Title != "" {
 		name = cfg.ResponseSchema.Title
@@ -397,6 +399,7 @@ func newJSONSchemaFormat(cfg *genai.GenerateContentConfig) (*responses.ResponseF
 	return &responses.ResponseFormatTextJSONSchemaConfigParam{
 		Name:   name,
 		Schema: schema,
+		Strict: param.NewOpt(true),
 		Type:   constant.JSONSchema("json_schema"),
 	}, nil
 }
@@ -417,5 +420,73 @@ func normalizeSchema(schema any) (map[string]any, error) {
 			return nil, fmt.Errorf("openai: unmarshal json schema: %w", err)
 		}
 		return result, nil
+	}
+}
+
+// enforceStrictOpenAISchema recursively walks the schema and enforces the rules
+// required by OpenAI's structured outputs with strict=true. Specifically, it
+// sets additionalProperties=false on all object types, and ensures that all
+// properties are listed in the required array.
+func enforceStrictOpenAISchema(val any) {
+	schema, ok := val.(map[string]any)
+	if !ok {
+		return
+	}
+
+	if _, hasRef := schema["$ref"]; hasRef {
+		for key := range schema {
+			if key != "$ref" {
+				delete(schema, key)
+			}
+		}
+		return
+	}
+
+	t, hasType := schema["type"]
+	isObj := hasType && t == "object"
+	propsVal, hasProps := schema["properties"]
+
+	if isObj && hasProps {
+		schema["additionalProperties"] = false
+		if propsMap, ok := propsVal.(map[string]any); ok {
+			req := make([]string, 0, len(propsMap))
+			for k := range propsMap {
+				req = append(req, k)
+			}
+			sort.Strings(req)
+			schema["required"] = req
+		}
+	}
+
+	if defsVal, ok := schema["$defs"]; ok {
+		if defsMap, ok := defsVal.(map[string]any); ok {
+			for _, defn := range defsMap {
+				enforceStrictOpenAISchema(defn)
+			}
+		}
+	}
+
+	if hasProps {
+		if propsMap, ok := propsVal.(map[string]any); ok {
+			for _, prop := range propsMap {
+				enforceStrictOpenAISchema(prop)
+			}
+		}
+	}
+
+	for _, key := range []string{"anyOf", "oneOf", "allOf"} {
+		if arrVal, ok := schema[key]; ok {
+			if arr, ok := arrVal.([]any); ok {
+				for _, item := range arr {
+					enforceStrictOpenAISchema(item)
+				}
+			}
+		}
+	}
+
+	if itemsVal, ok := schema["items"]; ok {
+		if _, isMap := itemsVal.(map[string]any); isMap {
+			enforceStrictOpenAISchema(itemsVal)
+		}
 	}
 }
